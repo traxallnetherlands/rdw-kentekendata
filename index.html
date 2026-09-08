@@ -580,7 +580,6 @@
                 v.datum_eerste_tenaamstelling_in_nederland || v.datum_tenaamstelling,
               ),
               "Vervaldatum APK": date(v.vervaldatum_apk),
-              Inrichting: v.inrichting || "",
               Carrosserietype: [
                 ...new Set(
                   cs
@@ -829,24 +828,24 @@
             "Complete data",
           );
 
-          if (S.missing.length > 0) {
-            const missingRows = S.missing.map((plate, index) => ({
-              Volgnummer: index + 1,
-              Kenteken: plate,
-              Status: "Niet gevonden",
-            }));
+if (S.missing.length > 0) {
+    const missingRows = S.missing.map((plate) => ({
+        Kenteken: plate,
+        Status: "Niet gevonden",
+    }));
 
-            const missingSheet = sheet(
-              missingRows,
-              [],
-              ["Volgnummer"],
-            );
-            XLSX.utils.book_append_sheet(
-              workbook,
-              missingSheet,
-              "Kentekens niet gevonden",
-            );
-          }
+    const missingSheet = sheet(
+        missingRows,
+        [],
+        [],
+    );
+
+    XLSX.utils.book_append_sheet(
+        workbook,
+        missingSheet,
+        "Kentekens niet gevonden",
+    );
+}
 
           const now = new Date();
           const stamp = [
