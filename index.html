@@ -652,13 +652,34 @@
           .replace(/>/g, "&gt;");
       }
       function render() {
-        let m = new Map(S.rel.map((r) => [r.Kenteken, r]));
+        const relevantByPlate = new Map(
+          S.rel.map((row) => [row.Kenteken, row]),
+        );
+
         $("body").innerHTML = S.p
-          .map((p) => {
-            let r = m.get(p);
-            if (!r)
-              return `<tr data-s="${p.toLowerCase()}"><td class="plate">${esc(p)}</td><td colspan="7" class="na">Niet gevonden</td></tr>`;
-            return `<tr data-s="${esc(Object.values(r).join(" ").toLowerCase())}"><td class="plate">${esc(p)}</td><td>${esc(r.Merk)}</td><td>${esc(r.Handelsbenaming)}</td><td class="num">${esc(r["CO²-emissie WLTP"])}</td><td class="num">${r.Catalogusprijs === "" ? "" : r.Catalogusprijs.toLocaleString("nl-NL")}</td><td class="num">${dshow(r["Datum 1e toelating"])}</td><td class="num">${dshow(r["Datum 1e tenaamstelling NL"])}</td><td class="num">${dshow(r["Vervaldatum APK"])}</td></tr>`;
+          .filter((plate) => relevantByPlate.has(plate))
+          .map((plate) => {
+            const row = relevantByPlate.get(plate);
+            const searchText = esc(
+              Object.values(row).join(" ").toLowerCase(),
+            );
+
+            return `
+              <tr data-s="${searchText}">
+                <td class="plate">${esc(plate)}</td>
+                <td>${esc(row.Merk)}</td>
+                <td>${esc(row.Handelsbenaming)}</td>
+                <td class="num">${esc(row["CO²-emissie WLTP"])}</td>
+                <td class="num">${
+                  row.Catalogusprijs === ""
+                    ? ""
+                    : row.Catalogusprijs.toLocaleString("nl-NL")
+                }</td>
+                <td class="num">${dshow(row["Datum 1e toelating"])}</td>
+                <td class="num">${dshow(row["Datum 1e tenaamstelling NL"])}</td>
+                <td class="num">${dshow(row["Vervaldatum APK"])}</td>
+              </tr>
+            `;
           })
           .join("");
       }
@@ -712,16 +733,30 @@
           let x = ws[XLSX.utils.encode_cell({ r: 0, c })];
           if (x) heads[x.v] = c;
         }
-        for (let h of dates)
-          for (let r = 1; r <= range.e.r; r++) {
-            let x = ws[XLSX.utils.encode_cell({ r, c: heads[h] })];
-            if (x && x.v instanceof Date) x.z = "dd-mm-yyyy";
+        for (const header of dates) {
+          const column = heads[header];
+          if (column === undefined) continue;
+
+          for (let row = 1; row <= range.e.r; row++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: row, c: column })];
+            if (cell && cell.v instanceof Date) {
+              cell.t = "d";
+              cell.z = "dd-mm-yyyy";
+            }
           }
-        for (let h of ints)
-          for (let r = 1; r <= range.e.r; r++) {
-            let x = ws[XLSX.utils.encode_cell({ r, c: heads[h] })];
-            if (x && typeof x.v === "number") x.z = "0";
+        }
+
+        for (const header of ints) {
+          const column = heads[header];
+          if (column === undefined) continue;
+
+          for (let row = 1; row <= range.e.r; row++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: row, c: column })];
+            if (cell && typeof cell.v === "number") {
+              cell.z = "0";
+            }
           }
+        }
         ws["!cols"] = Object.keys(rows[0] || {}).map((h) => ({
           wch: Math.min(45, Math.max(12, h.length + 2)),
         }));
@@ -737,36 +772,103 @@
         return ws;
       }
       function download() {
-        let wb = XLSX.utils.book_new(),
-          dates = ["Datum 1e toelating", "Datum 1e tenaamstelling NL", "Vervaldatum APK"],
-          ints = ["CO²-emissie WLTP", "Catalogusprijs"];
-        XLSX.utils.book_append_sheet(wb, sheet(S.rel, dates, ints), "Relevante data");
-        let cr = completeRows(),
-          ch = Object.keys(cr[0] || {}),
-          cd = ch.filter((x) => /^Datum |^Vervaldatum /i.test(x)),
-          ci = ch.filter((x) =>
+        try {
+          if (typeof XLSX === "undefined") {
+            throw new Error(
+              "De Excel-bibliotheek is niet geladen. Vernieuw de pagina en probeer opnieuw.",
+            );
+          }
+
+          if (!S.rel.length) {
+            throw new Error(
+              "Er zijn nog geen gevonden kentekens om te exporteren.",
+            );
+          }
+
+          const workbook = XLSX.utils.book_new();
+          const relevantDateHeaders = [
+            "Datum 1e toelating",
+            "Datum 1e tenaamstelling NL",
+            "Vervaldatum APK",
+          ];
+          const relevantNumberHeaders = [
+            "CO²-emissie WLTP",
+            "Catalogusprijs",
+          ];
+
+          const relevantSheet = sheet(
+            S.rel,
+            relevantDateHeaders,
+            relevantNumberHeaders,
+          );
+          XLSX.utils.book_append_sheet(
+            workbook,
+            relevantSheet,
+            "Relevante data",
+          );
+
+          const complete = completeRows();
+          const completeHeaders = Object.keys(complete[0] || {});
+          const completeDateHeaders = completeHeaders.filter((header) =>
+            /^Datum |^Vervaldatum /i.test(header),
+          );
+          const completeNumberHeaders = completeHeaders.filter((header) =>
             /prijs|massa|vermogen|emissie|uitstoot|verbruik|afstand|lengte|breedte|hoogte|aantal|cilinderinhoud|wielbasis|laadvermogen/i.test(
-              x,
+              header,
             ),
           );
-        XLSX.utils.book_append_sheet(wb, sheet(cr, cd, ci), "Complete data");
-        if (S.missing.length)
+
+          const completeSheet = sheet(
+            complete,
+            completeDateHeaders,
+            completeNumberHeaders,
+          );
           XLSX.utils.book_append_sheet(
-            wb,
-            sheet(
-              S.missing.map((p, i) => ({
-                Volgnummer: i + 1,
-                Kenteken: p,
-                Status: "Niet gevonden",
-              })),
+            workbook,
+            completeSheet,
+            "Complete data",
+          );
+
+          if (S.missing.length > 0) {
+            const missingRows = S.missing.map((plate, index) => ({
+              Volgnummer: index + 1,
+              Kenteken: plate,
+              Status: "Niet gevonden",
+            }));
+
+            const missingSheet = sheet(
+              missingRows,
               [],
               ["Volgnummer"],
-            ),
-            "Kentekens N/A",
+            );
+            XLSX.utils.book_append_sheet(
+              workbook,
+              missingSheet,
+              "Kentekens N/A",
+            );
+          }
+
+          const now = new Date();
+          const stamp = [
+            now.getFullYear(),
+            String(now.getMonth() + 1).padStart(2, "0"),
+            String(now.getDate()).padStart(2, "0"),
+          ].join("-");
+
+          XLSX.writeFile(
+            workbook,
+            `RDW_Kentekendata_${stamp}.xlsx`,
+            { compression: true },
           );
-        let d = new Date(),
-          stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        XLSX.writeFile(wb, `RDW_Kentekendata_${stamp}.xlsx`);
+
+          status(
+            `${S.found.length} van de ${S.p.length} kentekens gevonden.\nDe Excel-export is gedownload.`,
+            "success",
+          );
+        } catch (error) {
+          console.error("Excel-export mislukt:", error);
+          status(`Excel-export mislukt: ${error.message}`, "error");
+        }
       }
       function clearAll() {
         S = resetState();
