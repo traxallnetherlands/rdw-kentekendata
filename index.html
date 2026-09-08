@@ -388,7 +388,14 @@
     </div>
     <script>
       "use strict";
-      const DS = { v: "m9d7-ebf2", f: "8ys7-d773", c: "vezc-m2t6", a: "3huj-srit" },
+      const DS = {
+        v: "m9d7-ebf2",
+        f: "8ys7-d773",
+        c: "vezc-m2t6",
+        a: "3huj-srit",
+        recallStatus: "t49b-isb7",
+        recallDetails: "j9yg-7rg9",
+      },
         BASE = "https://opendata.rdw.nl/resource/",
         $ = (id) => document.getElementById(id);
       let S = resetState();
@@ -401,6 +408,8 @@
           f: [],
           c: [],
           a: [],
+          recallStatus: [],
+          recallDetails: [],
           rel: [],
           complete: [],
           warn: [],
@@ -441,19 +450,42 @@
         for (let i = 0; i < a.length; i += n) o.push(a.slice(i, i + n));
         return o;
       }
-      async function api(id, plates, cb) {
-        let out = [],
-          g = groups(plates);
-        for (let i = 0; i < g.length; i++) {
-          cb && cb(i + 1, g.length);
-          let w = `kenteken in(${g[i].map((x) => `'${x}'`).join(",")})`,
-            q = new URLSearchParams({ $where: w, $limit: "50000" }),
-            r = await fetch(`${BASE}${id}.json?${q}`);
-          if (!r.ok) throw Error(`${id}: HTTP ${r.status}`);
-          out.push(...(await r.json()));
-        }
-        return out;
+      function escapeSocrataValue(value) {
+        return String(value || "").replace(/'/g, "''");
       }
+
+      async function apiByField(datasetId, fieldName, values, callback) {
+        const output = [];
+        const valueGroups = groups(values);
+
+        for (let index = 0; index < valueGroups.length; index++) {
+          if (callback) callback(index + 1, valueGroups.length);
+
+          const quotedValues = valueGroups[index]
+            .map((value) => `'${escapeSocrataValue(value)}'`)
+            .join(",");
+          const where = `${fieldName} in(${quotedValues})`;
+          const query = new URLSearchParams({
+            $where: where,
+            $limit: "50000",
+          });
+          const response = await fetch(`${BASE}${datasetId}.json?${query}`);
+
+          if (!response.ok) {
+            throw new Error(`${datasetId}: HTTP ${response.status}`);
+          }
+
+          const rows = await response.json();
+          if (Array.isArray(rows)) output.push(...rows);
+        }
+
+        return output;
+      }
+
+      async function api(id, plates, callback) {
+        return apiByField(id, "kenteken", plates, callback);
+      }
+
       function byPlate(rows) {
         let m = new Map();
         rows.forEach((r) => {
@@ -551,11 +583,43 @@
           n = num(first(fs, fields));
         return n === "" ? "N/A" : n;
       }
+      function openRecallStatusRows(rows) {
+        return rows.filter(
+          (row) => String(row.code_status || "").trim().toUpperCase() === "O",
+        );
+      }
+
+      function recallDescriptions(statusRows, detailMap) {
+        const descriptions = [];
+        const seen = new Set();
+
+        for (const statusRow of openRecallStatusRows(statusRows)) {
+          const reference = String(statusRow.referentiecode_rdw || "").trim();
+          if (!reference) continue;
+
+          const detail = detailMap.get(reference);
+          const description = String(detail?.omschrijving_defect || "").trim();
+          if (description && !seen.has(description)) {
+            seen.add(description);
+            descriptions.push(description);
+          }
+        }
+
+        return descriptions;
+      }
+
       function combine() {
         let vm = byPlate(S.v),
           fm = byPlate(S.f),
           cm = byPlate(S.c),
-          am = byPlate(S.a);
+          am = byPlate(S.a),
+          recallStatusMap = byPlate(S.recallStatus),
+          recallDetailMap = new Map(
+            S.recallDetails.map((row) => [
+              String(row.referentiecode_rdw || "").trim(),
+              row,
+            ]),
+          );
         S.rel = [];
         S.complete = [];
         for (let p of S.p) {
@@ -566,6 +630,8 @@
             as = am.get(p) || [],
             pw = power(fs),
             fu = fuel(fs, pw),
+            recallRows = recallStatusMap.get(p) || [],
+            descriptions = recallDescriptions(recallRows, recallDetailMap),
             r = {
               Kenteken: p,
               Merk: v.merk || "",
@@ -580,6 +646,7 @@
                 v.datum_eerste_tenaamstelling_in_nederland || v.datum_tenaamstelling,
               ),
               "Vervaldatum APK": date(v.vervaldatum_apk),
+              Terugroepactie: descriptions.length > 0 ? "Ja" : "Nee",
               Carrosserietype: [
                 ...new Set(
                   cs
@@ -588,6 +655,11 @@
                 ),
               ].join(" / "),
             };
+
+          descriptions.forEach((description, index) => {
+            r[`Terugroepactie ${index + 1}`] = description;
+          });
+
           S.rel.push(r);
           for (let fr of fs.length ? fs : [{}])
             S.complete.push({
@@ -619,6 +691,31 @@
               S.warn.push(e.message);
             }
           }
+          prog(94, "Terugroepacties ophalen...");
+          try {
+            S.recallStatus = await api(DS.recallStatus, p);
+
+            const openReferences = [
+              ...new Set(
+                openRecallStatusRows(S.recallStatus)
+                  .map((row) => String(row.referentiecode_rdw || "").trim())
+                  .filter(Boolean),
+              ),
+            ];
+
+            S.recallDetails = openReferences.length
+              ? await apiByField(
+                  DS.recallDetails,
+                  "referentiecode_rdw",
+                  openReferences,
+                )
+              : [];
+          } catch (error) {
+            S.warn.push(`Terugroepacties: ${error.message}`);
+            S.recallStatus = [];
+            S.recallDetails = [];
+          }
+
           let set = new Set(S.v.map((x) => norm(x.kenteken)));
           S.found = p.filter((x) => set.has(x));
           S.missing = p.filter((x) => !set.has(x));
@@ -690,6 +787,17 @@
       }
       function completeRows() {
         let map = new Map(S.rel.map((r) => [r.Kenteken, r])),
+          recallColumns = [
+            ...new Set(
+              S.rel.flatMap((row) =>
+                Object.keys(row).filter((key) => /^Terugroepactie \d+$/.test(key)),
+              ),
+            ),
+          ].sort((a, b) => {
+            const aNumber = Number(a.match(/\d+/)?.[0] || 0);
+            const bNumber = Number(b.match(/\d+/)?.[0] || 0);
+            return aNumber - bNumber;
+          }),
           prio = [
             "Kenteken",
             "Merk",
@@ -702,6 +810,8 @@
             "Datum 1e toelating",
             "Datum 1e tenaamstelling NL",
             "Vervaldatum APK",
+            "Terugroepactie",
+            ...recallColumns,
           ];
         return S.complete.map((raw) => {
           let r = map.get(norm(raw.kenteken)) || {},
@@ -770,6 +880,31 @@
         }
         return ws;
       }
+      function relevantRowsForExport() {
+        const recallColumns = [
+          ...new Set(
+            S.rel.flatMap((row) =>
+              Object.keys(row).filter((key) => /^Terugroepactie \d+$/.test(key)),
+            ),
+          ),
+        ].sort((a, b) => {
+          const aNumber = Number(a.match(/\d+/)?.[0] || 0);
+          const bNumber = Number(b.match(/\d+/)?.[0] || 0);
+          return aNumber - bNumber;
+        });
+
+        return S.rel.map((row) => {
+          const output = {};
+          for (const [key, value] of Object.entries(row)) {
+            if (!/^Terugroepactie \d+$/.test(key)) output[key] = value;
+          }
+          for (const column of recallColumns) {
+            output[column] = row[column] || "";
+          }
+          return output;
+        });
+      }
+
       function download() {
         try {
           if (typeof XLSX === "undefined") {
@@ -795,8 +930,9 @@
             "Catalogusprijs",
           ];
 
+          const relevantExportRows = relevantRowsForExport();
           const relevantSheet = sheet(
-            S.rel,
+            relevantExportRows,
             relevantDateHeaders,
             relevantNumberHeaders,
           );
