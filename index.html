@@ -13,6 +13,7 @@
         --s: #f8faff;
         --l: #cfd6e4;
         --g: #16875d;
+        --traxall-orange: #F59E0B;
       }
       * {
         box-sizing: border-box;
@@ -80,16 +81,27 @@
         gap: 12px;
       }
       button {
-        width: 100%;
-        min-height: 46px;
-        border: 0;
-        border-radius: 8px;
-        padding: 10px 18px;
-        background: var(--n);
-        color: #fff;
-        font-weight: bold;
-        cursor: pointer;
-      }
+    width: 100%;
+    min-height: 52px;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 18px;
+
+    font-size: 16px;
+    font-weight: 700;
+
+    background: var(--n);
+    color: #fff;
+    cursor: pointer;
+}
+      #fetch {
+    background: var(--traxall-orange);
+    color: var(--n);
+}
+
+#fetch:hover:not(:disabled) {
+    background: #E58E00;
+}
       button:hover:not(:disabled) {
         background: var(--nd);
       }
@@ -162,14 +174,19 @@
         color: var(--n);
       }
       .status {
-        min-height: 88px;
-        padding: 15px 17px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        line-height: 1.55;
-        white-space: pre-line;
-      }
+    min-height: 88px;
+    padding: 15px 17px;
+    border-radius: 8px;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+
+    text-align: center;
+    line-height: 1.55;
+    white-space: pre-line;
+}
       .info {
         background: #edf2f8;
         border: 1px solid var(--l);
@@ -336,9 +353,10 @@
               <div class="stat"><b>INGEVOERD</b><span id="sin">0</span></div>
               <div class="stat"><b>GEVONDEN</b><span id="sfound">0</span></div>
             </div>
-            <div id="status" class="status info">
-              Voer kentekens in en klik op <strong>&nbsp;Gegevens ophalen</strong>.
-            </div>
+           <div id="status" class="status info">
+    Voer kentekens in en klik op<br>
+    <strong>Gegevens ophalen</strong>
+</div>
           </div>
         </div>
       </section>
@@ -756,7 +774,11 @@
         $("body").innerHTML = "";
         $("results").classList.remove("show");
         $("export").disabled = true;
-        status("Voer kentekens in en klik op <strong>Gegevens ophalen</strong>.", "info", true);
+       status(
+    "Voer kentekens in en klik op<br><strong>Gegevens ophalen</strong>",
+    "info",
+    true
+);
         count();
       }
       function count() {
