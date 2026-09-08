@@ -813,6 +813,7 @@
 
           return {
             Kenteken: norm(statusRow.kenteken),
+            "Details terugroepactie": rdwDetailLink,
             "Referentiecode RDW": reference,
             "Code status": statusRow.code_status || "",
             Status: statusRow.status || "",
@@ -835,7 +836,6 @@
             "Datum melding bij RDW": date(detail.datum_melding_bij_rdw),
             "Risicobeoordeling RDW": detail.risicobeoordeling_rdw || "",
             "Datum informeren eigenaar": date(detail.datum_informeren_eigenaar),
-            "Details terugroepactie": rdwDetailLink,
           };
         });
       }
@@ -844,11 +844,11 @@
         return XLSX.utils.aoa_to_sheet([
           [
             "Kenteken",
+            "Details terugroepactie",
             "Referentiecode RDW",
             "Code status",
             "Status",
             "Omschrijving defect",
-            "Details terugroepactie",
           ],
         ]);
       }
