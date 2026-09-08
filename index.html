@@ -958,6 +958,10 @@
             relevantSheet,
             "Relevante data",
           );
+          workbook.Workbook = workbook.Workbook || {};
+          workbook.Workbook.Sheets = workbook.Workbook.Sheets || [];
+          workbook.Workbook.Sheets[0] = workbook.Workbook.Sheets[0] || {};
+          workbook.Workbook.Sheets[0].TabColor = { rgb: "C6EFCE" };
 
           const complete = completeRows();
           const completeHeaders = Object.keys(complete[0] || {});
@@ -1009,6 +1013,8 @@
             recallSheet,
             "Terugroepacties",
           );
+          workbook.Workbook.Sheets[2] = workbook.Workbook.Sheets[2] || {};
+          workbook.Workbook.Sheets[2].TabColor = { rgb: "FF9999" };
 
 if (S.missing.length > 0) {
     const missingRows = S.missing.map((plate) => ({
@@ -1027,6 +1033,9 @@ if (S.missing.length > 0) {
         missingSheet,
         "Kentekens niet gevonden",
     );
+    const missingIndex = workbook.SheetNames.length - 1;
+    workbook.Workbook.Sheets[missingIndex] = workbook.Workbook.Sheets[missingIndex] || {};
+    workbook.Workbook.Sheets[missingIndex].TabColor = { rgb: "FCE4D6" };
 }
 
           const now = new Date();
