@@ -1,143 +1,549 @@
+
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Bulk RDW-kentekengegevens ophalen en exporteren naar Excel.">
+  <title>RDW Kenteken Export</title>
 
-    <title>RDW Kenteken Export</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-    <!-- SheetJS voor het genereren van Excel-bestanden -->
-    https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.jsscript>
+  <style>
+    :root {
+      --navy:#12263f;
+      --navy2:#1e4468;
+      --teal:#00a6a6;
+      --teal-dark:#008484;
+      --green:#17845c;
+      --red:#bd3c32;
+      --amber:#b97700;
+      --bg:#f3f6f9;
+      --card:#fff;
+      --text:#1e2935;
+      --muted:#667587;
+      --line:#dce4eb;
+    }
 
-    <style>
-        :root {
-            --primary: #152c46;
-            --secondary: #00a6a6;
-            --secondary-dark: #008c8c;
-            --background: #f3f6f9;
-            --card: #ffffff;
-            --text: #1d2733;
-            --muted: #657487;
-            --border: #dce3ea;
-            --success: #16875d;
-            --warning: #d18b00;
-            --danger: #c0392b;
+    * { box-sizing:border-box; }
+
+    body {
+      margin:0;
+      min-height:100vh;
+      font-family:"Century Gothic", Aptos, Arial, sans-serif;
+      color:var(--text);
+      background:radial-gradient(circle at 100% 0, rgba(0,166,166,.14), transparent 420px), var(--bg);
+    }
+
+    .page { width:min(1220px, calc(100% - 32px)); margin:38px auto; }
+
+    .hero {
+      padding:34px;
+      color:#fff;
+      background:linear-gradient(135deg,var(--navy),var(--navy2));
+      border-radius:22px;
+      box-shadow:0 18px 45px rgba(18,38,63,.18);
+    }
+
+    .eyebrow {
+      display:inline-block;
+      padding:7px 12px;
+      margin-bottom:15px;
+      border:1px solid rgba(255,255,255,.25);
+      border-radius:999px;
+      font-size:12px;
+      font-weight:700;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      background:rgba(255,255,255,.08);
+    }
+
+    h1 { margin:0 0 12px; font-size:clamp(30px,5vw,48px); line-height:1.08; }
+    .hero p { max-width:800px; margin:0; color:rgba(255,255,255,.82); line-height:1.65; }
+
+    .card {
+      margin-top:24px;
+      padding:28px;
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:20px;
+      box-shadow:0 12px 34px rgba(18,38,63,.07);
+    }
+
+    h2 { margin:0 0 8px; color:var(--navy); font-size:22px; }
+    .intro { margin:0 0 20px; color:var(--muted); line-height:1.55; }
+    label { display:block; margin-bottom:9px; color:var(--navy); font-weight:700; font-size:14px; }
+
+    textarea {
+      width:100%;
+      min-height:220px;
+      padding:18px;
+      resize:vertical;
+      outline:none;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fbfcfd;
+      color:var(--text);
+      font:15px/1.7 Consolas,"Courier New",monospace;
+    }
+
+    textarea:focus, input:focus { border-color:var(--teal); box-shadow:0 0 0 4px rgba(0,166,166,.11); }
+
+    .input-meta { display:flex; justify-content:space-between; gap:12px; margin-top:10px; color:var(--muted); font-size:13px; }
+    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; }
+
+    button {
+      min-height:46px;
+      padding:0 18px;
+      border:0;
+      border-radius:12px;
+      cursor:pointer;
+      font:700 14px inherit;
+      transition:.15s ease;
+    }
+
+    button:hover:not(:disabled) { transform:translateY(-1px); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .primary { color:#fff; background:var(--teal); }
+    .primary:hover:not(:disabled) { background:var(--teal-dark); }
+    .secondary { color:var(--navy); background:#eaf0f5; }
+    .export { color:#fff; background:var(--green); }
+
+    .progress-wrap { display:none; margin-top:18px; }
+    .progress-wrap.show { display:block; }
+    .progress-text { margin-bottom:8px; color:var(--muted); font-size:14px; }
+    .progress-track { height:10px; overflow:hidden; border-radius:999px; background:#e4ebf0; }
+    .progress-bar { width:0; height:100%; background:linear-gradient(90deg,var(--teal),#39c5bd); transition:width .2s ease; }
+
+    .status { display:none; margin-top:18px; padding:15px 17px; border-radius:12px; line-height:1.5; }
+    .status.show { display:block; }
+    .info { color:#155c70; background:#eaf7fb; border:1px solid #b9e4ee; }
+    .success { color:#0d6745; background:#e9f8f1; border:1px solid #b9e7d3; }
+    .warning { color:#724c00; background:#fff7e3; border:1px solid #efd38d; }
+    .error { color:#84291f; background:#fff0ee; border:1px solid #ecc0ba; }
+
+    .stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-top:22px; }
+    .stat { padding:18px; border:1px solid var(--line); border-radius:14px; background:#f8fafc; }
+    .stat strong { display:block; margin-bottom:7px; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+    .stat span { color:var(--navy); font-size:25px; font-weight:800; }
+
+    #resultsCard { display:none; }
+    #resultsCard.show { display:block; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:15px; margin-bottom:16px; }
+
+    #filterInput {
+      width:min(340px,100%);
+      min-height:43px;
+      padding:0 14px;
+      outline:none;
+      border:1px solid var(--line);
+      border-radius:11px;
+      font:14px inherit;
+    }
+
+    .table-wrap { max-height:580px; overflow:auto; border:1px solid var(--line); border-radius:14px; }
+    table { width:100%; min-width:1000px; border-collapse:collapse; font-size:13px; }
+    th { position:sticky; top:0; z-index:2; padding:13px 14px; color:#fff; background:var(--navy); text-align:left; white-space:nowrap; }
+    td { padding:12px 14px; border-bottom:1px solid var(--line); vertical-align:top; }
+    tbody tr:nth-child(even) { background:#f8fafc; }
+    tbody tr:hover { background:#edf8f7; }
+
+    .plate { display:inline-block; min-width:108px; padding:7px 10px; color:#111; background:#ffd800; border:2px solid #222; border-radius:5px; text-align:center; font:800 13px Arial,sans-serif; letter-spacing:1px; }
+    .badge { display:inline-block; padding:5px 9px; border-radius:999px; font-size:12px; font-weight:700; }
+    .found { color:#0d6745; background:#dff5e9; }
+    .missing { color:#84291f; background:#fde5e2; }
+    footer { padding:28px 8px 10px; color:var(--muted); text-align:center; font-size:12px; }
+
+    @media (max-width:800px) {
+      .page { width:calc(100% - 20px); margin:18px auto; }
+      .hero,.card { padding:21px; border-radius:16px; }
+      .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .toolbar { align-items:stretch; flex-direction:column; }
+      #filterInput { width:100%; }
+    }
+
+    @media (max-width:480px) {
+      .stats { grid-template-columns:1fr; }
+      .input-meta { flex-direction:column; }
+      .actions button { width:100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div class="eyebrow">RDW Open Data</div>
+      <h1>RDW Kenteken Export</h1>
+      <p>Plak meerdere Nederlandse kentekens, haal de openbare RDW-gegevens op en exporteer alle ontvangen velden naar één Excel-bestand met afzonderlijke tabbladen.</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Kentekens invoeren</h2>
+        <p class="intro">Eén per regel werkt het prettigst. Komma's, puntkomma's, tabs en spaties worden ook herkend. Dubbele kentekens worden automatisch verwijderd.</p>
+
+        <label for="licenseInput">Kentekens</label>
+        <textarea id="licenseInput" spellcheck="false" placeholder="Bijvoorbeeld:
+P552KH
+G123AB
+12AB34"></textarea>
+
+        <div class="input-meta">
+          <span id="inputCount">0 unieke kentekens</span>
+          <span>Streepjes worden automatisch verwijderd</span>
+        </div>
+
+        <div class="actions">
+          <button id="fetchButton" class="primary" type="button">Gegevens ophalen</button>
+          <button id="exampleButton" class="secondary" type="button">Voorbeeld</button>
+          <button id="clearButton" class="secondary" type="button">Wissen</button>
+          <button id="exportButton" class="export" type="button" disabled>Exporteren naar Excel</button>
+        </div>
+
+        <div id="progressWrap" class="progress-wrap">
+          <div id="progressText" class="progress-text">Voorbereiden...</div>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+        </div>
+
+        <div id="statusBox" class="status"></div>
+
+        <div class="stats">
+          <div class="stat"><strong>Ingevoerd</strong><span id="statInput">0</span></div>
+          <div class="stat"><strong>Gevonden</strong><span id="statFound">0</span></div>
+          <div class="stat"><strong>Niet gevonden</strong><span id="statMissing">0</span></div>
+          <div class="stat"><strong>RDW-datasets</strong><span>4</span></div>
+        </div>
+      </section>
+
+      <section id="resultsCard" class="card">
+        <div class="toolbar">
+          <div>
+            <h2>Resultaten</h2>
+            <p class="intro" style="margin-bottom:0">Het scherm toont kernvelden. De Excel-export bevat alle velden die de vier API-aanvragen teruggeven.</p>
+          </div>
+          <input id="filterInput" type="search" placeholder="Filter resultaten...">
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kenteken</th><th>Status</th><th>Merk</th><th>Handelsbenaming</th><th>Voertuigsoort</th><th>Inrichting</th><th>Brandstof</th><th>Eerste toelating</th><th>APK</th><th>Kleur</th><th>Massa ledig</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer>Deze toepassing gebruikt openbare RDW-data. Controleer bedrijfskritische gegevens altijd bij de oorspronkelijke bron.</footer>
+  </div>
+
+  <script>
+    "use strict";
+
+    const DATASETS = {
+      voertuigen: { id:"m9d7-ebf2", sheet:"Voertuigen" },
+      brandstof: { id:"8ys7-d773", sheet:"Brandstof" },
+      carrosserie: { id:"vezc-m2t6", sheet:"Carrosserie" },
+      assen: { id:"3huj-srit", sheet:"Assen" }
+    };
+
+    const API_BASE = "https://opendata.rdw.nl/resource/";
+    const BATCH_SIZE = 35;
+
+    const el = id => document.getElementById(id);
+    const licenseInput = el("licenseInput");
+    const fetchButton = el("fetchButton");
+    const exampleButton = el("exampleButton");
+    const clearButton = el("clearButton");
+    const exportButton = el("exportButton");
+
+    let state = freshState();
+
+    function freshState() {
+      return {
+        licenses:[], found:[], missing:[],
+        results:{ voertuigen:[], brandstof:[], carrosserie:[], assen:[] },
+        warnings:[]
+      };
+    }
+
+    function normalizePlate(value) {
+      return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    }
+
+    function parsePlates(text) {
+      const tokens = String(text || "")
+        .replace(/[;,|\t\r\n]+/g, " ")
+        .split(/\s+/)
+        .map(normalizePlate)
+        .filter(value => value.length >= 4 && value.length <= 8);
+      return [...new Set(tokens)];
+    }
+
+    function updateCounter() {
+      const count = parsePlates(licenseInput.value).length;
+      el("inputCount").textContent = `${count} ${count === 1 ? "uniek kenteken" : "unieke kentekens"}`;
+      el("statInput").textContent = count;
+    }
+
+    function setStatus(message, type="info") {
+      const box = el("statusBox");
+      box.className = `status show ${type}`;
+      box.textContent = message;
+    }
+
+    function clearStatus() {
+      el("statusBox").className = "status";
+      el("statusBox").textContent = "";
+    }
+
+    function setBusy(busy) {
+      fetchButton.disabled = busy;
+      exampleButton.disabled = busy;
+      clearButton.disabled = busy;
+      if (busy) exportButton.disabled = true;
+      el("progressWrap").classList.toggle("show", busy);
+    }
+
+    function setProgress(percent, text) {
+      el("progressBar").style.width = `${Math.max(0, Math.min(100, percent))}%`;
+      el("progressText").textContent = text;
+    }
+
+    function chunks(values, size) {
+      const output = [];
+      for (let i=0; i<values.length; i+=size) output.push(values.slice(i,i+size));
+      return output;
+    }
+
+    function whereClause(plates) {
+      return `kenteken in(${plates.map(p => `'${p.replace(/'/g,"''")}'`).join(",")})`;
+    }
+
+    async function fetchDataset(datasetId, plates, onBatch) {
+      const groups = chunks(plates, BATCH_SIZE);
+      const rows = [];
+      for (let i=0; i<groups.length; i++) {
+        if (onBatch) onBatch(i+1, groups.length);
+        const params = new URLSearchParams({ "$where":whereClause(groups[i]), "$limit":"50000" });
+        const response = await fetch(`${API_BASE}${datasetId}.json?${params.toString()}`, { headers:{ Accept:"application/json" } });
+        if (!response.ok) throw new Error(`Dataset ${datasetId}: HTTP ${response.status}`);
+        const data = await response.json();
+        if (Array.isArray(data)) rows.push(...data);
+      }
+      return rows;
+    }
+
+    async function runSearch() {
+      clearStatus();
+      const licenses = parsePlates(licenseInput.value);
+      if (!licenses.length) {
+        setStatus("Voer minimaal één geldig kenteken in.", "warning");
+        licenseInput.focus();
+        return;
+      }
+
+      state = freshState();
+      state.licenses = licenses;
+      el("statInput").textContent = licenses.length;
+      el("statFound").textContent = "0";
+      el("statMissing").textContent = "0";
+      el("resultsCard").classList.remove("show");
+      setBusy(true);
+      setProgress(4,"Basisgegevens voorbereiden...");
+
+      try {
+        state.results.voertuigen = await fetchDataset(DATASETS.voertuigen.id, licenses, (current,total) => {
+          setProgress(5 + Math.round((current/total)*35), `Basisgegevens ophalen: batch ${current} van ${total}`);
+        });
+
+        const extraKeys = ["brandstof","carrosserie","assen"];
+        for (let i=0; i<extraKeys.length; i++) {
+          const key = extraKeys[i];
+          setProgress(42 + i*18, `${DATASETS[key].sheet} ophalen...`);
+          try {
+            state.results[key] = await fetchDataset(DATASETS[key].id, licenses);
+          } catch (error) {
+            state.results[key] = [];
+            state.warnings.push(error.message);
+          }
         }
 
-        * {
-            box-sizing: border-box;
+        const foundSet = new Set(state.results.voertuigen.map(row => normalizePlate(row.kenteken)));
+        state.found = licenses.filter(p => foundSet.has(p));
+        state.missing = licenses.filter(p => !foundSet.has(p));
+
+        el("statFound").textContent = state.found.length;
+        el("statMissing").textContent = state.missing.length;
+        renderResults();
+        el("resultsCard").classList.add("show");
+        exportButton.disabled = false;
+        setProgress(100,"Gereed");
+
+        if (!state.results.voertuigen.length) {
+          setStatus("Geen voertuiggegevens gevonden. De controlelijst kan wel naar Excel worden geëxporteerd.", "warning");
+        } else if (state.warnings.length) {
+          setStatus(`${state.found.length} van ${licenses.length} kentekens gevonden. Niet alle aanvullende datasets konden worden opgehaald; beschikbare gegevens zijn exporteerbaar.`, "warning");
+        } else {
+          setStatus(`${state.found.length} van ${licenses.length} kentekens gevonden. De Excel-export staat klaar.`, "success");
+        }
+      } catch (error) {
+        console.error(error);
+        setStatus(`Ophalen mislukt: ${error.message}. Controleer de browserconsole en probeer opnieuw.`, "error");
+      } finally {
+        setBusy(false);
+        exportButton.disabled = state.licenses.length === 0;
+      }
+    }
+
+    function groupByPlate(rows) {
+      const map = new Map();
+      for (const row of rows) {
+        const plate = normalizePlate(row.kenteken);
+        if (!plate) continue;
+        if (!map.has(plate)) map.set(plate,[]);
+        map.get(plate).push(row);
+      }
+      return map;
+    }
+
+    function formatDate(value) {
+      const text = String(value || "").trim();
+      if (/^\d{8}$/.test(text)) return `${text.slice(6,8)}-${text.slice(4,6)}-${text.slice(0,4)}`;
+      return text;
+    }
+
+    function safe(value) {
+      return String(value ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+    }
+
+    function renderResults() {
+      const vehicles = groupByPlate(state.results.voertuigen);
+      const fuels = groupByPlate(state.results.brandstof);
+      const body = el("resultsBody");
+      body.innerHTML = "";
+
+      for (const plate of state.licenses) {
+        const vehicle = (vehicles.get(plate) || [])[0];
+        const fuelText = [...new Set((fuels.get(plate) || []).map(r => r.brandstof_omschrijving).filter(Boolean))].join(", ");
+        const tr = document.createElement("tr");
+        tr.dataset.search = [plate,vehicle?.merk,vehicle?.handelsbenaming,vehicle?.voertuigsoort,vehicle?.inrichting,fuelText].filter(Boolean).join(" ").toLowerCase();
+
+        if (!vehicle) {
+          tr.innerHTML = `<td><span class="plate">${safe(plate)}</span></td><td><span class="badge missing">Niet gevonden</span></td><td colspan="9">Geen basisgegevens gevonden</td>`;
+        } else {
+          const color = [vehicle.eerste_kleur,vehicle.tweede_kleur].filter(Boolean).join(" / ");
+          tr.innerHTML = `
+            <td><span class="plate">${safe(plate)}</span></td>
+            <td><span class="badge found">Gevonden</span></td>
+            <td>${safe(vehicle.merk)}</td>
+            <td>${safe(vehicle.handelsbenaming)}</td>
+            <td>${safe(vehicle.voertuigsoort)}</td>
+            <td>${safe(vehicle.inrichting)}</td>
+            <td>${safe(fuelText)}</td>
+            <td>${safe(formatDate(vehicle.datum_eerste_toelating))}</td>
+            <td>${safe(formatDate(vehicle.vervaldatum_apk))}</td>
+            <td>${safe(color)}</td>
+            <td>${safe(vehicle.massa_ledig_voertuig)}</td>`;
+        }
+        body.appendChild(tr);
+      }
+    }
+
+    function filterRows() {
+      const query = el("filterInput").value.trim().toLowerCase();
+      el("resultsBody").querySelectorAll("tr").forEach(row => {
+        row.style.display = (row.dataset.search || "").includes(query) ? "" : "none";
+      });
+    }
+
+    function displayHeader(key) {
+      return key.split("_").map(part => part ? part[0].toUpperCase()+part.slice(1) : part).join(" ");
+    }
+
+    function excelRows(rows) {
+      return rows.map(row => {
+        const output = {};
+        for (const [key,raw] of Object.entries(row)) {
+          let value = raw ?? "";
+          if (key.startsWith("datum_") || key.startsWith("vervaldatum_")) value = formatDate(value);
+          output[displayHeader(key)] = value;
+        }
+        return output;
+      });
+    }
+
+    function worksheet(rows, emptyText) {
+      const data = rows.length ? rows : [{ Melding:emptyText }];
+      const sheet = XLSX.utils.json_to_sheet(data);
+      const headers = Object.keys(data[0]);
+      sheet["!cols"] = headers.map((header,index) => {
+        let width = header.length;
+        for (const row of data.slice(0,500)) width = Math.max(width, String(Object.values(row)[index] ?? "").length);
+        return { wch:Math.min(Math.max(width+2,12),45) };
+      });
+      if (sheet["!ref"]) sheet["!autofilter"] = { ref:sheet["!ref"] };
+      return sheet;
+    }
+
+    function exportExcel() {
+      if (!state.licenses.length) return setStatus("Er zijn geen resultaten om te exporteren.","warning");
+      if (typeof XLSX === "undefined") return setStatus("De Excel-bibliotheek is niet geladen. Controleer of jsDelivr is toegestaan in je browser of bedrijfsnetwerk.","error");
+
+      try {
+        const workbook = XLSX.utils.book_new();
+        const foundSet = new Set(state.found);
+        const control = state.licenses.map((plate,index) => ({ Volgnummer:index+1, Kenteken:plate, Status:foundSet.has(plate)?"Gevonden":"Niet gevonden" }));
+        XLSX.utils.book_append_sheet(workbook,worksheet(control,"Geen kentekens"),"Controle");
+
+        for (const [key,config] of Object.entries(DATASETS)) {
+          XLSX.utils.book_append_sheet(workbook,worksheet(excelRows(state.results[key]),`Geen gegevens ontvangen uit dataset ${config.id}`),config.sheet);
         }
 
-        body {
-            margin: 0;
-            font-family: "Century Gothic", Aptos, Arial, sans-serif;
-            background:
-                radial-gradient(circle at top right, rgba(0, 166, 166, 0.12), transparent 420px),
-                var(--background);
-            color: var(--text);
-        }
+        const info = [
+          { Onderdeel:"Exportdatum", Waarde:new Date().toLocaleString("nl-NL") },
+          { Onderdeel:"Ingevoerde kentekens", Waarde:state.licenses.length },
+          { Onderdeel:"Gevonden kentekens", Waarde:state.found.length },
+          { Onderdeel:"Niet gevonden kentekens", Waarde:state.missing.length },
+          ...Object.values(DATASETS).map(d => ({ Onderdeel:`Dataset ${d.sheet}`, Waarde:d.id }))
+        ];
+        XLSX.utils.book_append_sheet(workbook,worksheet(info,"Geen exportinformatie"),"Exportinformatie");
 
-        .page {
-            width: min(1200px, calc(100% - 32px));
-            margin: 40px auto;
-        }
+        const now = new Date();
+        const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+        XLSX.writeFile(workbook,`RDW_Kentekenexport_${date}.xlsx`,{ compression:true });
+        setStatus("Het Excel-bestand is aangemaakt en gedownload.","success");
+      } catch (error) {
+        console.error(error);
+        setStatus(`Excel-export mislukt: ${error.message}`,"error");
+      }
+    }
 
-        .header {
-            background: linear-gradient(135deg, var(--primary), #244b70);
-            color: white;
-            border-radius: 22px;
-            padding: 34px;
-            box-shadow: 0 16px 40px rgba(21, 44, 70, 0.18);
-        }
+    function reset() {
+      state = freshState();
+      licenseInput.value = "";
+      el("resultsBody").innerHTML = "";
+      el("resultsCard").classList.remove("show");
+      el("filterInput").value = "";
+      el("statInput").textContent = "0";
+      el("statFound").textContent = "0";
+      el("statMissing").textContent = "0";
+      exportButton.disabled = true;
+      clearStatus();
+      updateCounter();
+      licenseInput.focus();
+    }
 
-        .header-label {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 7px 12px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.09);
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.07em;
-            text-transform: uppercase;
-        }
-
-        .header h1 {
-            margin: 0 0 12px;
-            font-size: clamp(28px, 5vw, 46px);
-            line-height: 1.08;
-        }
-
-        .header p {
-            max-width: 760px;
-            margin: 0;
-            color: rgba(255, 255, 255, 0.82);
-            line-height: 1.65;
-        }
-
-        .card {
-            margin-top: 24px;
-            padding: 28px;
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            box-shadow: 0 12px 35px rgba(20, 41, 62, 0.08);
-        }
-
-        .card h2 {
-            margin: 0 0 8px;
-            color: var(--primary);
-            font-size: 22px;
-        }
-
-        .card-intro {
-            margin: 0 0 20px;
-            color: var(--muted);
-            line-height: 1.55;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 9px;
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--primary);
-        }
-
-        textarea {
-            width: 100%;
-            min-height: 210px;
-            padding: 18px;
-            resize: vertical;
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            outline: none;
-            background: #fbfcfd;
-            color: var(--text);
-            font-family: Consolas, "Courier New", monospace;
-            font-size: 15px;
-            line-height: 1.7;
-            transition: 0.2s ease;
-        }
-
-        textarea:focus {
-            border-color: var(--secondary);
-            background: white;
-            box-shadow: 0 0 0 4px rgba(0, 166, 166, 0.12);
-        }
-
-        .input-footer {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            margin-top: 10px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        .actions {
-            display: flex;
-     
+    licenseInput.addEventListener("input",updateCounter);
+    fetchButton.addEventListener("click",runSearch);
+    exampleButton.addEventListener("click",() => { licenseInput.value="P552KH\nG123AB\n12AB34"; updateCounter(); });
+    clearButton.addEventListener("click",reset);
+    exportButton.addEventListener("click",exportExcel);
+    el("filterInput").addEventListener("input",filterRows);
+    updateCounter();
+  </script>
+</body>
+</html>
