@@ -589,23 +589,53 @@
         );
       }
 
-      function recallDescriptions(statusRows, detailMap) {
-        const descriptions = [];
-        const seen = new Set();
+      function isValidWebUrl(value) {
+        try {
+          const url = new URL(String(value || "").trim());
+          return url.protocol === "http:" || url.protocol === "https:";
+        } catch {
+          return false;
+        }
+      }
+
+      function recallItems(statusRows, detailMap) {
+        const items = [];
+        const seenReferences = new Set();
 
         for (const statusRow of openRecallStatusRows(statusRows)) {
           const reference = String(statusRow.referentiecode_rdw || "").trim();
-          if (!reference) continue;
+          if (!reference || seenReferences.has(reference)) continue;
+          seenReferences.add(reference);
 
-          const detail = detailMap.get(reference);
-          const description = String(detail?.omschrijving_defect || "").trim();
-          if (description && !seen.has(description)) {
-            seen.add(description);
-            descriptions.push(description);
-          }
+          const detail = detailMap.get(reference) || {};
+          const description = String(detail.omschrijving_defect || "").trim();
+          const rawLink = String(detail.meer_informatie_op_internet || "").trim();
+
+          items.push({
+            reference,
+            description,
+            link: isValidWebUrl(rawLink) ? rawLink : "",
+          });
         }
 
-        return descriptions;
+        return items;
+      }
+
+      function dynamicRecallColumns() {
+        let maximum = 0;
+        for (const row of S.rel) {
+          const count = Object.keys(row).filter((key) =>
+            /^Terugroepactie \d+$/.test(key),
+          ).length;
+          maximum = Math.max(maximum, count);
+        }
+
+        const columns = [];
+        for (let index = 1; index <= maximum; index++) {
+          columns.push(`Terugroepactie ${index}`);
+          columns.push(`Link terugroepactie ${index}`);
+        }
+        return columns;
       }
 
       function combine() {
@@ -631,7 +661,7 @@
             pw = power(fs),
             fu = fuel(fs, pw),
             recallRows = recallStatusMap.get(p) || [],
-            descriptions = recallDescriptions(recallRows, recallDetailMap),
+            recalls = recallItems(recallRows, recallDetailMap),
             r = {
               Kenteken: p,
               Merk: v.merk || "",
@@ -646,7 +676,7 @@
                 v.datum_eerste_tenaamstelling_in_nederland || v.datum_tenaamstelling,
               ),
               "Vervaldatum APK": date(v.vervaldatum_apk),
-              Terugroepactie: descriptions.length > 0 ? "Ja" : "Nee",
+              Terugroepactie: recalls.length > 0 ? "Ja" : "Nee",
               Carrosserietype: [
                 ...new Set(
                   cs
@@ -656,8 +686,10 @@
               ].join(" / "),
             };
 
-          descriptions.forEach((description, index) => {
-            r[`Terugroepactie ${index + 1}`] = description;
+          recalls.forEach((recall, index) => {
+            const number = index + 1;
+            r[`Terugroepactie ${number}`] = recall.description;
+            r[`Link terugroepactie ${number}`] = recall.link;
           });
 
           S.rel.push(r);
@@ -695,7 +727,7 @@
           try {
             S.recallStatus = await api(DS.recallStatus, p);
 
-            const openReferences = [
+            const references = [
               ...new Set(
                 openRecallStatusRows(S.recallStatus)
                   .map((row) => String(row.referentiecode_rdw || "").trim())
@@ -703,11 +735,11 @@
               ),
             ];
 
-            S.recallDetails = openReferences.length
+            S.recallDetails = references.length
               ? await apiByField(
                   DS.recallDetails,
                   "referentiecode_rdw",
-                  openReferences,
+                  references,
                 )
               : [];
           } catch (error) {
@@ -787,17 +819,6 @@
       }
       function completeRows() {
         let map = new Map(S.rel.map((r) => [r.Kenteken, r])),
-          recallColumns = [
-            ...new Set(
-              S.rel.flatMap((row) =>
-                Object.keys(row).filter((key) => /^Terugroepactie \d+$/.test(key)),
-              ),
-            ),
-          ].sort((a, b) => {
-            const aNumber = Number(a.match(/\d+/)?.[0] || 0);
-            const bNumber = Number(b.match(/\d+/)?.[0] || 0);
-            return aNumber - bNumber;
-          }),
           prio = [
             "Kenteken",
             "Merk",
@@ -811,7 +832,7 @@
             "Datum 1e tenaamstelling NL",
             "Vervaldatum APK",
             "Terugroepactie",
-            ...recallColumns,
+            ...dynamicRecallColumns(),
           ];
         return S.complete.map((raw) => {
           let r = map.get(norm(raw.kenteken)) || {},
@@ -833,6 +854,26 @@
           return o;
         });
       }
+      function relevantRowsForExport() {
+        const dynamicColumns = dynamicRecallColumns();
+
+        return S.rel.map((row) => {
+          const output = {};
+          for (const [key, value] of Object.entries(row)) {
+            if (
+              !/^Terugroepactie \d+$/.test(key) &&
+              !/^Link terugroepactie \d+$/.test(key)
+            ) {
+              output[key] = value;
+            }
+          }
+          for (const column of dynamicColumns) {
+            output[column] = row[column] || "";
+          }
+          return output;
+        });
+      }
+
       function sheet(rows, dates = [], ints = []) {
         let ws = XLSX.utils.json_to_sheet(rows, { cellDates: true });
         if (!ws["!ref"]) return ws;
@@ -878,33 +919,31 @@
               fill: { fgColor: { rgb: "213153" } },
             };
         }
+
+        for (const [header, column] of Object.entries(heads)) {
+          if (!/^Link terugroepactie \d+$/.test(header)) continue;
+
+          for (let row = 1; row <= range.e.r; row++) {
+            const address = XLSX.utils.encode_cell({ r: row, c: column });
+            const cell = ws[address];
+            if (!cell || !isValidWebUrl(cell.v)) continue;
+
+            cell.l = {
+              Target: cell.v,
+              Tooltip: "Details terugroepactie openen",
+            };
+            cell.s = {
+              ...(cell.s || {}),
+              font: {
+                color: { rgb: "0563C1" },
+                underline: true,
+              },
+            };
+          }
+        }
+
         return ws;
       }
-      function relevantRowsForExport() {
-        const recallColumns = [
-          ...new Set(
-            S.rel.flatMap((row) =>
-              Object.keys(row).filter((key) => /^Terugroepactie \d+$/.test(key)),
-            ),
-          ),
-        ].sort((a, b) => {
-          const aNumber = Number(a.match(/\d+/)?.[0] || 0);
-          const bNumber = Number(b.match(/\d+/)?.[0] || 0);
-          return aNumber - bNumber;
-        });
-
-        return S.rel.map((row) => {
-          const output = {};
-          for (const [key, value] of Object.entries(row)) {
-            if (!/^Terugroepactie \d+$/.test(key)) output[key] = value;
-          }
-          for (const column of recallColumns) {
-            output[column] = row[column] || "";
-          }
-          return output;
-        });
-      }
-
       function download() {
         try {
           if (typeof XLSX === "undefined") {
