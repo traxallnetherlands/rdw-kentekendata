@@ -397,6 +397,8 @@
         recallDetails: "j9yg-7rg9",
       },
         BASE = "https://opendata.rdw.nl/resource/",
+        RDW_RECALL_BASE_URL =
+          "https://terugroepregister.rdw.nl/nl/terugroepacties/",
         $ = (id) => document.getElementById(id);
       let S = resetState();
       function resetState() {
@@ -614,7 +616,11 @@
           items.push({
             reference,
             description,
-            link: isValidWebUrl(rawLink) ? rawLink : "",
+            link: reference
+              ? `${RDW_RECALL_BASE_URL}${encodeURIComponent(reference)}`
+              : isValidWebUrl(rawLink)
+                ? rawLink
+                : "",
           });
         }
 
