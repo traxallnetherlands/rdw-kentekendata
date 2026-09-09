@@ -647,7 +647,11 @@
         key: header,
         width: Math.min(45, Math.max(12, header.length + 2)),
       }));
-      rows.forEach((row) => {      const cleanRow = { ...row };      Object.keys(cleanRow).forEach((key) => {          if (cleanRow[key] instanceof Date) {              cleanRow[key] = new Date(                 cleanRow[key].getUTCFullYear(),                 cleanRow[key].getUTCMonth(),                 cleanRow[key].getUTCDate()             );          }      });      worksheet.addRow(cleanRow);  });
+      rows.forEach((row) => {
+4
+worksheet.addRow(row);
+5
+});
       worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
       worksheet.views = [{ state: "frozen", ySplit: 1 }];
       worksheet.getRow(1).eachCell((cell) => {
@@ -658,22 +662,21 @@
       headers.forEach((header, index) => {
     const column = worksheet.getColumn(index + 1);
 
-    if (/^Datum |^Vervaldatum |Publicatiedatum/i.test(header)) {
+if (/^Datum |^Vervaldatum |Publicatiedatum/i.test(header)) {
+    column.numFmt = "dd-mm-yyyy";
 
-        column.numFmt = "dd-mm-yyyy";
-
-        column.eachCell((cell, rowNumber) => {
-
+    column.eachCell(
+        { includeEmpty: false },
+        (cell, rowNumber) => {
             if (
                 rowNumber > 1 &&
                 cell.value instanceof Date
             ) {
                 cell.numFmt = "dd-mm-yyyy";
             }
-
-        });
-
-    }
+        }
+    );
+}
         if (["CO²-emissie WLTP", "Catalogusprijs"].includes(header)) column.numFmt = "0";
         if (["Details terugroepactie", "Meer informatie op internet"].includes(header)) {
           column.eachCell((cell, rowNumber) => {
