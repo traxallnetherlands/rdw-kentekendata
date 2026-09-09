@@ -656,8 +656,24 @@
       });
 
       headers.forEach((header, index) => {
-        const column = worksheet.getColumn(index + 1);
-        if (/^Datum |^Vervaldatum |Publicatiedatum/i.test(header)) column.numFmt = "dd-mm-yyyy";
+    const column = worksheet.getColumn(index + 1);
+
+    if (/^Datum |^Vervaldatum |Publicatiedatum/i.test(header)) {
+
+        column.numFmt = "dd-mm-yyyy";
+
+        column.eachCell((cell, rowNumber) => {
+
+            if (
+                rowNumber > 1 &&
+                cell.value instanceof Date
+            ) {
+                cell.numFmt = "dd-mm-yyyy";
+            }
+
+        });
+
+    }
         if (["CO²-emissie WLTP", "Catalogusprijs"].includes(header)) column.numFmt = "0";
         if (["Details terugroepactie", "Meer informatie op internet"].includes(header)) {
           column.eachCell((cell, rowNumber) => {
