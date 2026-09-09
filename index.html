@@ -647,7 +647,7 @@
         key: header,
         width: Math.min(45, Math.max(12, header.length + 2)),
       }));
-      rows.forEach((row) => worksheet.addRow(row));
+      rows.forEach((row) => {      const cleanRow = { ...row };      Object.keys(cleanRow).forEach((key) => {          if (cleanRow[key] instanceof Date) {              cleanRow[key] = new Date(                 cleanRow[key].getUTCFullYear(),                 cleanRow[key].getUTCMonth(),                 cleanRow[key].getUTCDate()             );          }      });      worksheet.addRow(cleanRow);  });
       worksheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
       worksheet.views = [{ state: "frozen", ySplit: 1 }];
       worksheet.getRow(1).eachCell((cell) => {
